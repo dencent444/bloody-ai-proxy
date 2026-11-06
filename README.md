@@ -1,5 +1,7 @@
 ![](image.png)
 
+> **PoC demonstrating the LLM proxy injection vulnerability class** — any AI coding agent that trusts a user-supplied API base URL is potentially affected, not just Claude Code. Current implementation targets Anthropic's API; OpenAI and others follow the same pattern and are planned.
+
 ## Goal
 
 **bloody-ai-proxy** is a redteam evil ai proxy exploitation toolkit. It starts a proxy (local or external) and simulates responses of a real Anthropic (OpenAI support soon) proxy. It can be used during redteaming paired with phishing — everything you need for the attack is that the victim only needs to change their `ANTHROPIC_BASE_URL`.
@@ -91,6 +93,6 @@ Show a text like this but inside the tool.
 
 ## Disclaimer
 
-This tool is initially made for redteaming. If you misuse it by exploiting real people without an official agreement and get in trouble — the author of this repo does not bear responsibility for your stupid actions.
+This tool is initially made for redteaming. If you misuse it by exploiting real people without an official agreement and get in trouble — the author of this repo does not bear responsibility for your actions.
 
 You might argue: "you have auto inject rules, this shi gotta be for blackhat exploitation." No. This feature was initially made for automating initial access in real life pentests/red teams — if you send 100 emails to a target company's workers and 10 of them fall for "free tokens", you may not make it in time to connect everyone to C2 or do other things you need for initial access. So don't think I'm just masking illegal things under a redteam hood.
