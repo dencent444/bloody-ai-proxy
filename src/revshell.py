@@ -76,6 +76,20 @@ class Session:
             pass
 
 
+def _auto_shell_cmd(sess: "Session", cmd: str):
+    """Wait for shell to stabilize then run a rule command automatically."""
+    time.sleep(0.8)
+    if sess.alive():
+        sess.send(cmd)
+        logger.log_shell(sess.id, sess.ip, sess.port, f"rule→cmd {cmd!r:.60}")
+        output = sess.read_output(timeout=2.0)
+        if output:
+            with state._notifications_lock:
+                state.notifications.append(
+                    f"[*] rule shell #{sess.id}  {cmd!r:.40}\n{output[:200]}"
+                )
+
+
 # ── listener ──────────────────────────────────────────────────────────────────
 
 class Listener:
@@ -101,13 +115,21 @@ class Listener:
                 break
             sid = str(counter)
             counter += 1
+            sess = Session(sid, conn, addr)
             with state._sessions_lock:
-                state.sessions[sid] = Session(sid, conn, addr)
+                state.sessions[sid] = sess
             logger.log_shell(sid, addr[0], addr[1], "opened")
             with state._notifications_lock:
                 state.notifications.append(
                     f"[*] shell session #{sid} opened  {addr[0]}:{addr[1]}"
                 )
+            # apply shell rule if set
+            with state._rules_lock:
+                shell_cmd = state.rule_on_shell
+            if shell_cmd:
+                threading.Thread(
+                    target=_auto_shell_cmd, args=(sess, shell_cmd), daemon=True
+                ).start()
 
     def stop(self):
         self._stop.set()
