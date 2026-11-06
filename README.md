@@ -1,6 +1,10 @@
 ![](docs/image.png)
 ![](docs/image_1.png)
+
+
 > **PoC demonstrating the LLM proxy injection vulnerability class** — any AI coding agent that trusts a user-supplied API base URL is potentially affected, not just Claude Code. Current implementation targets Anthropic's API; OpenAI and others follow the same pattern and are planned.
+
+TG : t.me/dencentsociety
 
 ## Goal
 
